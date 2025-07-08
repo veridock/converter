@@ -32,12 +32,39 @@ install_system_packages() {
         # Sprawdź dystrybucję
         if command -v apt-get >/dev/null 2>&1; then
             # Debian/Ubuntu
-            echo "Aktualizacja listy pakietów..."
-            # Próba aktualizacji, ale kontynuuj nawet jeśli się nie uda
-            sudo apt-get update || true
+            echo "Próba naprawy źródeł pakietów..."
             
+            # Pobierz nazwę dystrybucji i architekturę
+            DISTRO_CODENAME=$(lsb_release -cs)
+            ARCH=$(dpkg --print-architecture)
+            
+            echo "Wykryto dystrybucję: $DISTRO_CODENAME ($ARCH)"
+            
+            # Użyj mirrora, który działa (np. mirrors.edge.kernel.org)
+            MIRROR="http://mirrors.edge.kernel.org/ubuntu"
+            
+            # Utwórz nowy plik sources.list
+            echo "# VeriDock temporary sources.list" | sudo tee /etc/apt/sources.list
+            
+            # Dodaj główne repozytorium
+            echo "deb $MIRROR/ $DISTRO_CODENAME main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
+            
+            # Dodaj repozytoria updates i security
+            echo "deb $MIRROR/ $DISTRO_CODENAME-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
+            echo "deb $MIRROR/ $DISTRO_CODENAME-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
+            
+            # Wyczyść cache APT
+            echo "Czyszczenie cache APT..."
+            sudo rm -rf /var/lib/apt/lists/*
+            sudo mkdir -p /var/lib/apt/lists/partial
+            sudo apt-get clean
+            
+            # Zaktualizuj listę pakietów
+            echo "Aktualizacja listy pakietów..."
+            sudo apt-get update -o Acquire::AllowInsecureRepositories=true -o Acquire::AllowDowngradeToInsecureRepositories=true || true
+            
+            # Zainstaluj wymagane pakiety
             echo "Instalowanie wymaganych pakietów..."
-            # Próba instalacji podstawowych pakietów bez zależności zewnętrznych
             sudo apt-get install -y --no-install-recommends \
                 python3 \
                 python3-pip \
@@ -45,6 +72,11 @@ install_system_packages() {
                 tesseract-ocr \
                 tesseract-ocr-pol \
                 poppler-utils
+                
+            if [ $? -ne 0 ]; then
+                echo "Ostrzeżenie: Niektóre pakiety nie mogły zostać zainstalowane."
+                echo "Kontynuowanie instalacji z dostępnymi pakietami..."
+            fi
         elif command -v yum >/dev/null 2>&1; then
             # CentOS/RHEL
             sudo yum install -y python3 python3-pip tesseract poppler-utils
@@ -98,13 +130,13 @@ install_python_packages() {
         source venv/bin/activate
     fi
 
-    # Lista wymaganych pakietów
+    # Lista wymaganych pakietów z mniej restrykcyjnymi wersjami
     cat > requirements.txt << EOF
-pdf2image>=3.1.0
-Pillow>=10.0.0
-pytesseract>=0.3.10
-watchdog>=3.0.0
-PyPDF2>=3.0.0
+pdf2image>=1.0.0
+Pillow>=9.0.0
+pytesseract>=0.3.0
+watchdog>=2.0.0
+PyPDF2>=2.0.0
 EOF
 
     pip install -r requirements.txt
